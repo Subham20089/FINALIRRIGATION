@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP8266 Sensor Data</title>
+    
+    <!-- Firebase & Chart.js -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            background: white;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        /* Sensor Data Display */
+        .sensor-data {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            padding: 20px;
+        }
+
+        .sensor-box {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #f9f9f9, #ddd);
+            border-radius: 12px;
+            box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            min-width: 180px;
+        }
+
+        .sensor-box strong {
+            color: #ff5733;
+            margin-left: 5px;
+            font-size: 20px;
+        }
+
+        /* Button Styling */
+        .download-btn {
+            background: linear-gradient(135deg, #28a745, #218838); /* Gradient Green */
+            color: white;
+            padding: 12px 18px;
+            border: none;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s ease-in-out;
+            margin-top: 20px;
+        }
+
+        .download-btn:hover {
+            background: linear-gradient(135deg, #218838, #1e7e34);
+            transform: scale(1.05);
+        }
+
+        /* Canvas for Charts */
+        canvas {
+            max-width: 100%;
+            height: 250px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ESP8266 Sensor Data</h1>
+
+    <!-- Sensor Data Display -->
+    <div class="sensor-data">
+        <div class="sensor-box">Temperature: <strong id="temperature">Loading...</strong> °C</div>
+        <div class="sensor-box">Humidity: <strong id="humidity">Loading...</strong> %</div>
+        <div class="sensor-box">Soil Moisture: <strong id="soilMoisture">Loading...</strong> %</div>
+        <div class="sensor-box">Water Flow: <strong id="waterFlow">Loading...</strong> ml/min</div>
+        <div class="sensor-box">Motor Status: <strong id="motorStatus">Loading...</strong></div>
+    </div>
+
+    <div class="container">
+        <canvas id="tempChart"></canvas>
+        <canvas id="humidityChart"></canvas>
+        <canvas id="soilMoistureChart"></canvas>
+        <canvas id="waterFlowChart"></canvas>
+
+        <!-- Download CSV Button -->
+        <button class="download-btn" onclick="downloadCSV()">Download CSV</button>
+    </div>
+
+    <script>
+       var firebaseConfig = {
+            apiKey: "AIzaSyAf5LDV_L7mGUj3q-zW8OuH5Y8Jg_18y-0",
+            authDomain: "ayush-169c4.firebaseapp.com",
+            databaseURL: "https://ayush-169c4-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "ayush-169c4",
+            storageBucket: "ayush-169c4.appspot.com",
+            messagingSenderId: "",
+            appId: ""
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+
+        let labels = [];
+        let tempData = [];
+        let humidityData = [];
+        let soilMoistureData = [];
+        let waterFlowData = [];
+
+        function fetchData() {
+            database.ref("/DHT11/Temperature").on("value", (snapshot) => {
+                let value = snapshot.val();
+                document.getElementById("temperature").innerText = value;
+                updateChart(tempChart, tempData, value);
+            });
+
+            database.ref("/DHT11/Humidity").on("value", (snapshot) => {
+                let value = snapshot.val();
+                document.getElementById("humidity").innerText = value;
+                updateChart(humidityChart, humidityData, value);
+            });
+
+            database.ref("/SoilSensor/Moisture").on("value", (snapshot) => {
+                let value = snapshot.val();
+                document.getElementById("soilMoisture").innerText = value;
+                updateChart(soilMoistureChart, soilMoistureData, value);
+            });
+
+            database.ref("/WaterFlowSensor/FlowRate").on("value", (snapshot) => {
+                let value = snapshot.val();
+                document.getElementById("waterFlow").innerText = value;
+                updateChart(waterFlowChart, waterFlowData, value);
+            });
+
+            database.ref("/Motor/Status").on("value", (snapshot) => {
+                let value = snapshot.val();
+                document.getElementById("motorStatus").innerText = value ? "ON" : "OFF";
+            });
+        }
+
+        function updateChart(chart, dataset, value) {
+            if (dataset.length > 10) dataset.shift();
+            dataset.push(value);
+            labels.push(new Date().toLocaleTimeString());
+            if (labels.length > 10) labels.shift();
+            chart.update();
+        }
+
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Time,Temperature,Humidity,Soil Moisture,Water Flow,Motor Status\n";
+
+            for (let i = 0; i < labels.length; i++) {
+                csvContent += `${labels[i]},${tempData[i] || ""},${humidityData[i] || ""},${soilMoistureData[i] || ""},${waterFlowData[i] || ""},${document.getElementById("motorStatus").innerText}\n`;
+            }
+
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "sensor_data.csv");
+            document.body.appendChild(link);
+            link.click();
+        }
+
+        var tempChart = new Chart(document.getElementById("tempChart"), {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: "Temperature (°C)", data: tempData, borderColor: "red", fill: false }] }
+        });
+
+        var humidityChart = new Chart(document.getElementById("humidityChart"), {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: "Humidity (%)", data: humidityData, borderColor: "blue", fill: false }] }
+        });
+
+        var soilMoistureChart = new Chart(document.getElementById("soilMoistureChart"), {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: "Soil Moisture (%)", data: soilMoistureData, borderColor: "green", fill: false }] }
+        });
+
+        var waterFlowChart = new Chart(document.getElementById("waterFlowChart"), {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: "Water Flow (ml/min)", data: waterFlowData, borderColor: "purple", fill: false }] }
+        });
+
+        window.onload = function() {
+            fetchData();
+            setInterval(fetchData, 5000);
+        };
+    </script>
+</body>
+</html>
